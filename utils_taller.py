@@ -196,5 +196,12 @@ def crear_syllabus_en_docs(
 
     for ph, txt in mapping.items():
         docs_replace(doc_id, ph, txt)
+    
+        drive_service.permissions().create(
+        fileId=document_id,
+        body={"type": "domain", "role": "writer", "domain": "datarebels.mx"},
+        fields="id"
+    ).execute()
+
 
     return f"https://docs.google.com/document/d/{doc_id}/edit"
