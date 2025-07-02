@@ -175,7 +175,7 @@ def crear_syllabus_en_docs(
     d3: str,
 ) -> str:
 
-    new_doc = drive.files().copy(
+    new_doc = drive_service.files().copy(
         fileId=SYLLABUS_TEMPLATE_ID,
         body={"name": f"Syllabus – {nombre}"},
     ).execute()
