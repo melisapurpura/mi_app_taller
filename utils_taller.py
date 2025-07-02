@@ -198,7 +198,7 @@ def crear_syllabus_en_docs(
         docs_replace(doc_id, ph, txt)
     
         drive_service.permissions().create(
-        fileId=document_id,
+        fileId=doc_id,
         body={"type": "domain", "role": "writer", "domain": "datarebels.mx"},
         fields="id"
     ).execute()
