@@ -25,7 +25,7 @@ creds = service_account.Credentials.from_service_account_file(
     SERVICE_JSON, scopes=SCOPES
 )
 docs = build("docs", "v1", credentials=creds)
-drive = build("drive", "v3", credentials=creds)
+drive_service = build("drive", "v3", credentials=creds)
 sheets = build("sheets", "v4", credentials=creds)
 
 # --------------------------------------------------------------------------- #
