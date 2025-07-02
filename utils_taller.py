@@ -82,7 +82,7 @@ def replace_placeholder(doc_id: str, placeholder: str, new_text: str):
 # --------------------------------------------------------------------------- #
 
 @st.cache_data(show_spinner=False)
-def generar_datos_taller(
+def generar_componentes_taller(
     nombre_taller: str,
     nivel: str,
     industria: str,

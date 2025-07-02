@@ -1,6 +1,6 @@
 import streamlit as st
 from utils_taller import (
-    generar_componentes_taller,
+    generar_componentes_taller ,
     crear_syllabus_en_docs,
 )
 
