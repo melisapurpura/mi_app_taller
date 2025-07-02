@@ -1,18 +1,19 @@
 import os
 import re
 import tempfile
+import datetime
 import requests
 import streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-"""utils_taller.py – Genera sólo el syllabus de un *taller* reutilizando la
-misma lógica que el generador de cursos (placeholders explícitos, flujo
-Backward‑Design, LearnLM).  
-Diferencias clave:
-• El outline se ajusta dinámicamente al nº de horas del taller.
-• Se omite `student_persona` y `siguiente` (curso posterior) porque no aplican
-  a un workshop independiente.
+"""utils_taller.py – Generador de syllabus para *talleres*
+---------------------------------------------------------------------
+Versión mejorada: el prompt solicita textos más "nutridos" para
+  • Generalidades del programa
+  • Perfil de ingreso
+  • Descripción y Detalles del plan de estudios (viñetas)
+Sigue la misma lógica y placeholders que el generador de cursos.
 """
 
 # --------------------------------------------------------------------------- #
@@ -35,7 +36,7 @@ docs_service = build("docs", "v1", credentials=creds)
 drive_service = build("drive", "v3", credentials=creds)
 
 # --------------------------------------------------------------------------- #
-#  Llamada al endpoint REST de Gemini‑1.5‑Flash                               #
+#  Llamada a Gemini‑1.5‑Flash                                                 #
 # --------------------------------------------------------------------------- #
 
 def call_gemini(prompt: str) -> str:
@@ -58,7 +59,7 @@ def call_gemini(prompt: str) -> str:
     raise RuntimeError("Fallo la llamada a Gemini.")
 
 # --------------------------------------------------------------------------- #
-#  Utilidad para reemplazar texto en Docs                                     #
+#  Reemplazo de placeholders en Docs                                          #
 # --------------------------------------------------------------------------- #
 
 def replace_placeholder(doc_id: str, placeholder: str, new_text: str):
@@ -77,7 +78,7 @@ def replace_placeholder(doc_id: str, placeholder: str, new_text: str):
     ).execute()
 
 # --------------------------------------------------------------------------- #
-#  1 · Generar los fragmentos del syllabus                                     #
+#  1 · Generar los fragmentos del syllabus                                    #
 # --------------------------------------------------------------------------- #
 
 @st.cache_data(show_spinner=False)
@@ -95,12 +96,10 @@ def generar_datos_taller(
 ## LEARNLM_ENABLE
 ## TASK: Generación de Syllabus para Taller
 ## REQUIRE_THOUGHT:
-Planear → Borrador → Autocrítica → Resultado final bajo ETIQUETAS
+Plan → Borrador → Crítica interna → Respuesta final bajo ETIQUETAS
 
-Eres una **diseñadora instruccional** experta en talleres (workshops) de datos, inteligencia artificial 
-y negocis.
-Aplica *Backward Design*, verbos de *Bloom* y la metodología **5E** para entregar un
-syllabus conciso y accionable.
+Eres una **diseñadora instruccional** experta en talleres intensivos de datos y negocio.
+Aplica *Backward Design*, verbos de *Bloom* y la metodología **5E**.
 
 Contexto
 --------
@@ -110,10 +109,14 @@ Contexto
 • Público: {publico}
 • Objetivos iniciales:
 {objetivos_raw}
-• Duración total: {horas} h (≈1 sesión/h). Si <4 h fusiona fases lógicamente.
+• Duración: {horas} h (≈1 sesión/hora; si <4 h fusiona fases apropiadamente)
 
-Salida solicitada (sin texto adicional)
---------------------------------------
+=== Instrucciones específicas ===
+1. **Generalidades del programa**: redáctalas en un párrafo nutrido (qué problema resuelve, beneficio para el participante y competencias que desarrollará y metodologia).
+2. **Perfil de ingreso**: párrafo claro con habilidades y conocimientos previos requeridos (no sólo copiar el público objetivo).
+3. **Detalles del plan**: lista con viñetas (una por sesión) → «• Sesión 1: Título – breve descripción (≤20 palabras)».
+
+=== Formato de salida ===
 [PERFIL_INGRESO]
 ...
 [OBJETIVOS]
@@ -162,14 +165,16 @@ Salida solicitada (sin texto adicional)
     }
 
 # --------------------------------------------------------------------------- #
-#  2 · Crear el syllabus en Google Docs                                        #
+#  2 · Crear el syllabus en Google Docs                                       #
 # --------------------------------------------------------------------------- #
 
 SYLLABUS_TEMPLATE_ID = "1I2jMQ1IjmG6_22dC7u6LYQfQzlND4WIvEusd756LFuo"
 
-
-def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict) -> str:
+def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict, anio: int | None = None) -> str:
     """Copia la plantilla y sustituye los placeholders con los datos del taller."""
+
+    if anio is None:
+        anio = datetime.datetime.utcnow().year
 
     doc_id = (
         drive_service.files()
@@ -179,6 +184,7 @@ def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict) -> str:
 
     placeholders = [
         ("{{nombre_del_curso}}", nombre_taller),
+        ("{{anio}}", str(anio)),
         ("{{generalidades_del_programa}}", partes["descripcion_plan"]),
         ("{{perfil_ingreso}}", partes["perfil_ingreso"]),
         ("{{perfil_egreso}}", partes["perfil_egreso"]),
@@ -195,7 +201,6 @@ def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict) -> str:
 
     for ph, val in placeholders:
         replace_placeholder(doc_id, ph, val)
-
     # Permiso de escritura al dominio
     drive_service.permissions().create(
         fileId=doc_id,
