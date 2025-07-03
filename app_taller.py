@@ -22,7 +22,7 @@ horas = st.number_input("Horas totales", 1, 16, 4, 1)
 # ✅ NUEVO BLOQUE: Mostrar links si ya se generaron previamente
 if "link_syllabus" in st.session_state and "link_outline" in st.session_state:
     st.success("✅ Syllabu previamente generados.")
-    col1 = st.columns(2)
+    col1, _ = st.columns(2)
     with col1:
         st.markdown(f"[📄 Ver Syllabus en Google Docs]({st.session_state['link_syllabus']})", unsafe_allow_html=True)
    
@@ -58,7 +58,7 @@ if st.button("Generar Syllabus"):
          
 
             st.success("✅ Syllabus y Outline generados correctamente.")
-            col1 = st.columns(2)
+            col1, _ = st.columns(2)
             with col1:
                 st.markdown(f"[📄 Ver Syllabus en Google Docs]({link_syllabus})", unsafe_allow_html=True)
       
