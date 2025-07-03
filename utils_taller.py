@@ -173,9 +173,9 @@ def generar_syllabus_completo(nombre_del_taller, nivel, objetivos_mejorados, pub
         respuesta = call_gemini(prompt)
         return respuesta.strip()
 
-    generalidades = pedir_seccion("Redacta un párrafo breve que combine descripción general del curso, su objetivo, el perfil de egreso, la duración del taller y entragables del taller.")
+    generalidades = pedir_seccion("GENERALIDADES_DEL_PROGRAMA","Redacta un párrafo breve que combine descripción general del curso, su objetivo, el perfil de egreso, la duración del taller y entragables del taller.")
     ingreso = pedir_seccion("PERFIL_INGRESO", "Redacta un párrafo claro y directo del perfil de ingreso del estudiante ya sea por roles sugeridos de la industria o por equipos de trabajo.")
-    detalles = pedir_seccion("Escribe la lista de de las sesiones por hora a tocar, esto dependerá de cuántas horas pongan en el input, cada una con título y una breve descripción, NO usar negritas en markdown.")
+    detalles = pedir_seccion("DETALLES_PLAN_ESTUDIOS","Escribe la lista de de las sesiones por hora a tocar, esto dependerá de cuántas horas pongan en el input, cada una con título y una breve descripción, NO usar negritas en markdown.")
 
     template_copy = drive_service.files().copy(
         fileId=TEMPLATE_ID,
