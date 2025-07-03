@@ -1,134 +1,97 @@
-import os
-import re
-import tempfile
-import datetime
-import requests
-import streamlit as st
+"""
+Utilidades para generar un syllabus de taller:
+1. llamar a Gemini,
+2. crear bloques base (perfil, objetivos, outline…),
+3. refinar secciones clave (generalidades, perfil_ingreso, detalles),
+4. rellenar la plantilla de Google Docs.
+"""
+
+from __future__ import annotations
+import json, re, tempfile, requests, streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-"""utils_taller.py – Generador de syllabus para *talleres*
----------------------------------------------------------------------
-Versión mejorada: el prompt solicita textos más "nutridos" para
-  • Generalidades del programa
-  • Perfil de ingreso
-  • Descripción y Detalles del plan de estudios (viñetas)
-Sigue la misma lógica y placeholders que el generador de cursos.
-"""
+# ───────────────────────── Google creds ──────────────────────────
+with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as f:
+    json.dump(json.loads(st.secrets["SERVICE_ACCOUNT_JSON"]), f)
+    SERVICE_ACCOUNT_FILE = f.name
 
-# --------------------------------------------------------------------------- #
-#  Configuración de servicios Google                                          #
-# --------------------------------------------------------------------------- #
 SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
 ]
-
-with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
-    tmp.write(st.secrets["SERVICE_ACCOUNT_JSON"])
-    SERVICE_KEY = tmp.name
-
 creds = service_account.Credentials.from_service_account_file(
-    SERVICE_KEY, scopes=SCOPES
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES
 )
-
 docs_service = build("docs", "v1", credentials=creds)
 drive_service = build("drive", "v3", credentials=creds)
 
-# --------------------------------------------------------------------------- #
-#  Llamada a Gemini‑1.5‑Flash                                                 #
-# --------------------------------------------------------------------------- #
+# ID de la plantilla con placeholders del syllabus
+TEMPLATE_ID = "1I2jMQ1IjmG6_22dC7u6LYQfQzlND4WIvEusd756LFuo"
 
+# ───────────────────────── Gemini helper ─────────────────────────
 def call_gemini(prompt: str) -> str:
-    """Devuelve la respuesta textual de Gemini 1.5 Flash."""
     url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/"
+        "models/gemini-1.5-flash-latest:generateContent"
     )
     r = requests.post(
         url,
-        headers={"Content-Type": "application/json"},
         params={"key": st.secrets["GEMINI_API_KEY"]},
+        headers={"Content-Type": "application/json"},
         json={
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": 3000},
         },
+        timeout=90,
     )
     if r.status_code == 200:
         return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-    st.error(f"Error en Gemini: {r.status_code} – {r.text}")
-    raise RuntimeError("Fallo la llamada a Gemini.")
+    raise RuntimeError(f"Gemini error {r.status_code}: {r.text}")
 
-# --------------------------------------------------------------------------- #
-#  Reemplazo de placeholders en Docs                                          #
-# --------------------------------------------------------------------------- #
 
-def replace_placeholder(doc_id: str, placeholder: str, new_text: str):
-    docs_service.documents().batchUpdate(
-        documentId=doc_id,
-        body={
-            "requests": [
-                {
-                    "replaceAllText": {
-                        "containsText": {"text": placeholder, "matchCase": True},
-                        "replaceText": new_text,
-                    }
-                }
-            ]
-        },
-    ).execute()
-
-# --------------------------------------------------------------------------- #
-#  1 · Generar los fragmentos del syllabus                                    #
-# --------------------------------------------------------------------------- #
-
+# ───────────────────────── Bloques base ──────────────────────────
 @st.cache_data(show_spinner=False)
-def generar_componentes_taller(
-    nombre_taller: str,
+def generar_bloques(
+    nombre: str,
     nivel: str,
     industria: str,
     publico: str,
     objetivos_raw: str,
     horas: int,
-):
-    """Devuelve todas las piezas necesarias para llenar la plantilla."""
-
+) -> dict[str, str]:
+    """
+    Pide a Gemini los bloques delimitados por etiquetas —manteniendo nomenclatura
+    de placeholders— y devuelve un diccionario con cada sección.
+    """
     prompt = f"""
-## LEARNLM_ENABLE
-## TASK: Generación de Syllabus para Taller
-## REQUIRE_THOUGHT:
-Plan → Borrador → Crítica interna → Respuesta final bajo ETIQUETAS
+Eres diseñador instruccional senior en talleres de IA, Ciencia de Datos y Negocios.
+Genera los bloques para un syllabus conservando exactamente los placeholders.
 
-Eres una **diseñadora instruccional** experta en talleres intensivos de datos y negocio.
-Aplica *Backward Design*, verbos de *Bloom* y la metodología **5E**.
+Taller.............: {nombre}
+Nivel..............: {nivel}
+Industria..........: {industria}
+Público objetivo...: {publico}
+Objetivos iniciales: {objetivos_raw}
+Duración total.....: {horas} h
 
-Contexto
---------
-• Taller: {nombre_taller}
-• Nivel: {nivel}
-• Industria: {industria}
-• Público: {publico}
-• Objetivos iniciales:
-{objetivos_raw}
-• Duración: {horas} h (≈1 sesión/hora; si <4 h fusiona fases apropiadamente)
+Instrucciones clave
+-------------------
+• Ajusta ejemplos/casos a la INDUSTRIA.  
+• Si horas > 4, divide agenda en **Día 1 / Día 2** (mitad de horas por día).  
+• Usa best-practices hands-on de IA orientados a negocio.  
 
-=== Instrucciones específicas ===
-1. **Generalidades del programa**: redáctalas en un párrafo nutrido (qué problema resuelve, beneficio para el participante y competencias que desarrollará y metodologia).
-2. **Perfil de ingreso**: párrafo claro con habilidades y conocimientos previos requeridos (no sólo copiar el público objetivo).
-3. **Detalles del plan**: lista con viñetas (una por sesión) → «• Sesión 1: Título – breve descripción (≤20 palabras)».
+Devuelve únicamente el contenido separado con estas etiquetas:
 
-=== Formato de salida ===
 [PERFIL_INGRESO]
 ...
 [OBJETIVOS]
 ...
 [PERFIL_EGRESO]
 ...
-[DESCRIPCION_PLAN]
-...
-[DETALLES_PLAN]
-...
 [OUTLINE]
 ...
+
 [TITULO_PRIMER_OBJETIVO_SECUNDARIO]
 ...
 [DESCRIPCION_PRIMER_OBJETIVO_SECUNDARIO]
@@ -142,66 +105,109 @@ Contexto
 [DESCRIPCION_TERCER_OBJETIVO_SECUNDARIO]
 ...
 """
+    texto = call_gemini(prompt)
 
-    raw = call_gemini(prompt)
-
-    def ext(tag: str):
-        m = re.search(rf"\[{tag}\]\n(.*?)(?=\n\[|\Z)", raw, re.S)
+    def _extr(tag):
+        m = re.search(rf"\[{tag}]\n(.*?)(?=\[|$)", texto, re.S)
         return m.group(1).strip() if m else ""
 
     return {
-        "perfil_ingreso": ext("PERFIL_INGRESO"),
-        "objetivos": ext("OBJETIVOS"),
-        "perfil_egreso": ext("PERFIL_EGRESO"),
-        "descripcion_plan": ext("DESCRIPCION_PLAN"),
-        "detalles_plan": ext("DETALLES_PLAN"),
-        "outline": ext("OUTLINE"),
-        "titulo1": ext("TITULO_PRIMER_OBJETIVO_SECUNDARIO"),
-        "desc1": ext("DESCRIPCION_PRIMER_OBJETIVO_SECUNDARIO"),
-        "titulo2": ext("TITULO_SEGUNDO_OBJETIVO_SECUNDARIO"),
-        "desc2": ext("DESCRIPCION_SEGUNDO_OBJETIVO_SECUNDARIO"),
-        "titulo3": ext("TITULO_TERCER_OBJETIVO_SECUNDARIO"),
-        "desc3": ext("DESCRIPCION_TERCER_OBJETIVO_SECUNDARIO"),
+        "perfil_ingreso": _extr("PERFIL_INGRESO"),
+        "objetivos": _extr("OBJETIVOS"),
+        "perfil_egreso": _extr("PERFIL_EGRESO"),
+        "outline": _extr("OUTLINE"),
+        "t1": _extr("TITULO_PRIMER_OBJETIVO_SECUNDARIO"),
+        "d1": _extr("DESCRIPCION_PRIMER_OBJETIVO_SECUNDARIO"),
+        "t2": _extr("TITULO_SEGUNDO_OBJETIVO_SECUNDARIO"),
+        "d2": _extr("DESCRIPCION_SEGUNDO_OBJETIVO_SECUNDARIO"),
+        "t3": _extr("TITULO_TERCER_OBJETIVO_SECUNDARIO"),
+        "d3": _extr("DESCRIPCION_TERCER_OBJETIVO_SECUNDARIO"),
     }
 
-# --------------------------------------------------------------------------- #
-#  2 · Crear el syllabus en Google Docs                                       #
-# --------------------------------------------------------------------------- #
 
-SYLLABUS_TEMPLATE_ID = "1I2jMQ1IjmG6_22dC7u6LYQfQzlND4WIvEusd756LFuo"
+# ────────────── Refinar y construir el syllabus completo ─────────
+def generar_syllabus_completo(
+    nombre: str,
+    nivel: str,
+    objetivos_mejorados: str,
+    publico: str,
+    siguiente: str,
+    perfil_ingreso: str,
+    perfil_egreso: str,
+    outline: str,
+    t1: str,
+    d1: str,
+    t2: str,
+    d2: str,
+    t3: str,
+    d3: str,
+) -> str:
+    """
+    1. Pide a Gemini las secciones refinadas (generalidades, perfil_ingreso, detalles),
+    2. copia la plantilla de Google Docs,
+    3. reemplaza todos los placeholders y devuelve la URL editable.
+    """
+    anio = 2025
 
-def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict, anio: int | None = None) -> str:
-    """Copia la plantilla y sustituye los placeholders con los datos del taller."""
+    def pedir_seccion(etiqueta: str, instruccion: str) -> str:
+        prompt = f"""
+Como experto en diseño instruccional y aplicando principios de LearnLM,
+genera SOLO la sección [{etiqueta}] para el syllabus.
 
-    if anio is None:
-        anio = datetime.datetime.utcnow().year
+Curso: {nombre}
+Nivel: {nivel}
+Año: {anio}
+Objetivos mejorados: {objetivos_mejorados}
 
+Perfil de ingreso: {perfil_ingreso}
+Perfil de egreso: {perfil_egreso}
+
+Outline:
+{outline}
+
+{instruccion}
+"""
+        return call_gemini(prompt).strip()
+
+    generalidades = pedir_seccion(
+        "GENERALIDADES_DEL_PROGRAMA",
+        "Redacta un párrafo que combine descripción, propósito y conexión con la industria.",
+    )
+    ingreso_refinado = pedir_seccion(
+        "PERFIL_INGRESO",
+        "Redacta un párrafo claro y directo del perfil de ingreso.",
+    )
+    detalles = pedir_seccion(
+        "DETALLES_PLAN_ESTUDIOS",
+        "Convierte el outline en bullets por sesión (sin negritas).",
+    )
+
+    # ─── Copiar plantilla y reemplazar ───
     doc_id = (
         drive_service.files()
-        .copy(fileId=SYLLABUS_TEMPLATE_ID, body={"name": f"Syllabus – {nombre_taller}"})
+        .copy(fileId=TEMPLATE_ID, body={"name": f"Syllabus - {nombre}"})
         .execute()["id"]
     )
 
-    placeholders = [
-        ("{{nombre_del_curso}}", nombre_taller),
-        ("{{anio}}", str(anio)),
-        ("{{generalidades_del_programa}}", partes["descripcion_plan"]),
-        ("{{perfil_ingreso}}", partes["perfil_ingreso"]),
-        ("{{perfil_egreso}}", partes["perfil_egreso"]),
-        ("{{objetivos_generales}}", partes["objetivos"]),
-        ("{{detalles_plan_estudios}}", partes["detalles_plan"]),
-        ("{{outline}}", partes["outline"]),
-        ("{{titulo_primer_objetivo_secundario}}", partes["titulo1"]),
-        ("{{descripcion_primer_objetivo_secundario}}", partes["desc1"]),
-        ("{{titulo_segundo_objetivo_secundario}}", partes["titulo2"]),
-        ("{{descripcion_segundo_objetivo_secundario}}", partes["desc2"]),
-        ("{{titulo_tercer_objetivo_secundario}}", partes["titulo3"]),
-        ("{{descripcion_tercer_objetivo_secundario}}", partes["desc3"]),
-    ]
+    mapping = {
+        "{{nombre_del_curso}}": nombre,
+        "{{anio}}": str(anio),
+        "{{generalidades_del_programa}}": generalidades,
+        "{{perfil_ingreso}}": ingreso_refinado,
+        "{{perfil_egreso}}": perfil_egreso,
+        "{{detalles_plan_estudios}}": detalles,
+        "{{titulo_primer_objetivo_secundario}}": t1,
+        "{{descripcion_primer_objetivo_secundario}}": d1,
+        "{{titulo_segundo_objetivo_secundario}}": t2,
+        "{{descripcion_segundo_objetivo_secundario}}": d2,
+        "{{titulo_tercer_objetivo_secundario}}": t3,
+        "{{descripcion_tercer_objetivo_secundario}}": d3,
+    }
 
-    for ph, val in placeholders:
-        replace_placeholder(doc_id, ph, val)
-    # Permiso de escritura al dominio
+    for ph, val in mapping.items():
+        _replace(doc_id, ph, val)
+
+    # Permiso de edición al dominio
     drive_service.permissions().create(
         fileId=doc_id,
         body={"type": "domain", "role": "writer", "domain": "datarebels.mx"},
@@ -209,3 +215,20 @@ def crear_syllabus_en_docs(nombre_taller: str, horas: int, partes: dict, anio: i
     ).execute()
 
     return f"https://docs.google.com/document/d/{doc_id}/edit"
+
+
+# helper interno
+def _replace(doc_id: str, placeholder: str, new_text: str) -> None:
+    docs_service.documents().batchUpdate(
+        documentId=doc_id,
+        body={
+            "requests": [
+                {
+                    "replaceAllText": {
+                        "containsText": {"text": placeholder, "matchCase": True},
+                        "replaceText": new_text,
+                    }
+                }
+            ]
+        },
+    ).execute()
