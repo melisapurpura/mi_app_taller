@@ -50,10 +50,17 @@ def call_gemini(prompt: str) -> str:
 @st.cache_data(show_spinner=False)
 def generar_datos_generales(nombre_del_taller, nivel, publico, student_persona, industria, objetivos_raw, horas):  
     prompt = f"""
-    Eres un experto en diseño instruccional y un tutor experimentado, aplicando los principios de la ciencia del aprendizaje
+    Eres diseñador instruccional senior en talleres de IA, Ciencia de Datos y Negocios, aplicando los principios de LearnLM, y los principios de la ciencia del aprendizaje
     para crear experiencias educativas efectivas y atractivas. Tu objetivo es generar un syllabus y outline
     que fomenten el aprendizaje activo, gestionen la carga cognitiva del estudiante y adapten el contenido
     a sus necesidades, inspirando curiosidad y profundizando la metacognición.
+
+    Para generar los tres objetivos secundarios y sus descripciones: Genera TRES objetivos secundarios del curso.
+
+    Formato:
+    - titulo_primer_objetivo_secundario  = **máx. 6 palabras**
+    - descripcion_primer_objetivo_secundario = **una frase ≤ 15 palabras**
+    (repite para los tres objetivos)
 
 
     Con base en los siguientes datos:
@@ -166,9 +173,9 @@ def generar_syllabus_completo(nombre_del_taller, nivel, objetivos_mejorados, pub
         respuesta = call_gemini(prompt)
         return respuesta.strip()
 
-    generalidades = pedir_seccion("GENERALIDADES_DEL_PROGRAMA", "Redacta un párrafo breve que combine descripción general del curso, su objetivo, el perfil de egreso, la duración del taller y entragables del taller.")
+    generalidades = pedir_seccion("Redacta un párrafo breve que combine descripción general del curso, su objetivo, el perfil de egreso, la duración del taller y entragables del taller.")
     ingreso = pedir_seccion("PERFIL_INGRESO", "Redacta un párrafo claro y directo del perfil de ingreso del estudiante ya sea por roles sugeridos de la industria o por equipos de trabajo.")
-    detalles = pedir_seccion("DETALLES_PLAN_ESTUDIOS", "Escribe la lista de de las sesiones por hora a tocar, esto dependerá de cuántas horas pongan en el input, cada una con título y una breve descripción, NO usar negritas en markdown.")
+    detalles = pedir_seccion("Escribe la lista de de las sesiones por hora a tocar, esto dependerá de cuántas horas pongan en el input, cada una con título y una breve descripción, NO usar negritas en markdown.")
 
     template_copy = drive_service.files().copy(
         fileId=TEMPLATE_ID,
