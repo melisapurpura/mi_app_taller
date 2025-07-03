@@ -7,7 +7,7 @@ from utils_taller import (
 
 # Configuración de la página de Streamlit
 st.set_page_config(page_title="Generador de Syllabus", layout="centered")
-st.title("🧠 Generador de Syllabus y Outline")
+st.title("🛠 Generador de Syllabus para taller")
 st.markdown("Completa los campos del curso para generar automáticamente el syllabus y el outline.")
 
 # === Inputs del curso ===
@@ -17,7 +17,7 @@ publico = st.text_area("Público objetivo")
 objetivos_raw = st.text_area("Objetivos del curso")
 industria  = st.text_input("Industria")
 horas = st.number_input("Horas totales", 1, 16, 4, 1)
-
+horas = int(horas)
 
 # ✅ NUEVO BLOQUE: Mostrar links si ya se generaron previamente
 if "link_syllabus" in st.session_state and "link_outline" in st.session_state:

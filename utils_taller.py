@@ -96,10 +96,15 @@ def generar_datos_generales(nombre_del_taller, nivel, publico, student_persona, 
     [DESCRIPCION_TERCER_OBJETIVO_SECUNDARIO]
     ...
 
-    El outline debe incluir  un tema o sesión por hora, Si horas > 4, divide agenda en **Día 1 / Día 2** (mitad de horas por día) y estar en formato de tabla Markdown con estas columnas:
+    El outline debe incluir 1 tema o sesión **por hora**.
+
+    - **Si horas ≤ 4 →** todo el contenido va en **Día 1**.
+    - **Si horas > 4 →** divide agenda en **Día 1** y **Día 2**, asignando la **mitad de las horas a cada día**  
+    (redondea hacia arriba si el total es impar; ej. 6 h → 3 + 3, 7 h → 4 + 3).
+
 
     | Sesión/hora | Título | Conceptos Clave | Objetivo 1 | Objetivo 2 | Objetivo 3 | Descripción |
-.
+
     """
     respuesta = call_gemini(prompt)
 
