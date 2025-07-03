@@ -164,11 +164,11 @@ def generar_syllabus_completo(nombre_del_taller, nivel, objetivos_mejorados, pub
 
     template_copy = drive_service.files().copy(
         fileId=TEMPLATE_ID,
-        body={"name": f"Syllabus - {nombre_del_curso}"}
+        body={"name": f"Syllabus - {nombre_del_taller}"}
     ).execute()
     document_id = template_copy["id"]
 
-    replace_placeholder(document_id, "{{nombre_del_curso}}", nombre_del_curso)
+    replace_placeholder(document_id, "{{nombre_del_curso}}", nombre_del_taller)
     replace_placeholder(document_id, "{{anio}}", str(anio))
     replace_placeholder(document_id, "{{generalidades_del_programa}}", generalidades)
     replace_placeholder(document_id, "{{perfil_ingreso}}", ingreso)
